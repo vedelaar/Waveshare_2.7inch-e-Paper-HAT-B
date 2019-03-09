@@ -58,6 +58,9 @@ def delay_ms(delaytime):
 
 def spi_writebyte(data):
     SPI.writebytes(data)
+    
+def spi_xfer(data):
+    return SPI.xfer2([data])
 
 def module_init():
     GPIO.setmode(GPIO.BCM)

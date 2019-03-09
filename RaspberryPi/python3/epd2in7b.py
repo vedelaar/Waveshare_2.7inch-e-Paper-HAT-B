@@ -260,28 +260,30 @@ class EPD:
         
         return 0
 
-    def getbuffer(self, image):
-        # print "bufsiz = ",(self.width/8) * self.height
-        buf = [0xFF] * ((self.width//8) * self.height)
+    def getbuffer(self, image, width = None, height = None):
+        width = width if width is not None else self.width
+        height = height if height is not None else self.height
+        # print "bufsiz = ",(width/8) * height
+        buf = [0xFF] * ((width//8) * height)
         image_monocolor = image.convert('1')
         imwidth, imheight = image_monocolor.size
         pixels = image_monocolor.load()
         # print "imwidth = %d, imheight = %d",imwidth,imheight
-        if(imwidth == self.width and imheight == self.height):
+        if(imwidth == width and imheight == height):
             print("Vertical")
             for y in range(imheight):
                 for x in range(imwidth):
                     # Set the bits for the column of pixels at the current position.
                     if pixels[x, y] == 0:
-                        buf[(x + y * self.width) // 8] &= ~(0x80 >> (x % 8))
-        elif(imwidth == self.height and imheight == self.width):
+                        buf[(x + y * width) // 8] &= ~(0x80 >> (x % 8))
+        elif(imwidth == height and imheight == width):
             print("Horizontal")
             for y in range(imheight):
                 for x in range(imwidth):
                     newx = y
-                    newy = self.height - x - 1
+                    newy = height - x - 1
                     if pixels[x, y] == 0:
-                        buf[(newx + newy*self.width) // 8] &= ~(0x80 >> (y % 8))
+                        buf[(newx + newy*width) // 8] &= ~(0x80 >> (y % 8))
         return buf
 
     def display(self, imageblack, imagered):
@@ -298,6 +300,51 @@ class EPD:
         self.send_command(DISPLAY_REFRESH) 
         self.wait_until_idle()
         
+    def displayPartial(self, imageblack, imagered, x, y, w, l):
+        self.send_command(PARTIAL_DATA_START_TRANSMISSION_1)
+        self.send_data(x >> 8);
+        self.send_data(x & 0xf8);     # x should be the multiple of 8, the last 3 bit will always be ignored
+        self.send_data(y >> 8);
+        self.send_data(y & 0xff);
+        self.send_data(w >> 8);
+        self.send_data(w & 0xf8);     # w (width) should be the multiple of 8, the last 3 bit will always be ignored
+        self.send_data(l >> 8);
+        self.send_data(l & 0xff);
+        for i in range(w  // 8 * l):
+            self.send_data(~imageblack[i]);
+
+        self.send_command(PARTIAL_DATA_START_TRANSMISSION_2)
+        self.send_data(x >> 8);
+        self.send_data(x & 0xf8);     # x should be the multiple of 8, the last 3 bit will always be ignored
+        self.send_data(y >> 8);
+        self.send_data(y & 0xff);
+        self.send_data(w >> 8);
+        self.send_data(w & 0xf8);     # w (width) should be the multiple of 8, the last 3 bit will always be ignored
+        self.send_data(l >> 8);
+        self.send_data(l & 0xff);
+        for i in range(w  // 8 * l):
+            self.send_data(~imagered[i]);
+
+        self.send_command(PARTIAL_DISPLAY_REFRESH);
+        self.send_data(x >> 8);
+        self.send_data(x & 0xf8);     # x should be the multiple of 8, the last 3 bit will always be ignored
+        self.send_data(y >> 8);
+        self.send_data(y & 0xff);
+        self.send_data(w >> 8);
+        self.send_data(w & 0xf8);     # w (width) should be the multiple of 8, the last 3 bit will always be ignored
+        self.send_data(l >> 8);
+        self.send_data(l & 0xff);
+    
+        self.wait_until_idle()
+
+    def getTemp(self):
+        self.send_command(POWER_ON_MEASURE);
+        print(epdconfig.spi_xfer(TEMPERATURE_SENSOR_COMMAND))
+        
+    def getLowPower(self):
+        self.send_command(POWER_ON_MEASURE);
+        print(epdconfig.spi_xfer(LOW_POWER_DETECTION))
+
     def Clear(self, color):
         self.send_command(DATA_START_TRANSMISSION_1)
         for i in range(0, self.width * self.height // 8):
@@ -313,6 +360,7 @@ class EPD:
         self.wait_until_idle()
 
     def sleep(self):
+        print("sleep")
         self.send_command(0X50)
         self.send_data(0xf7)
         self.send_command(0X02)
